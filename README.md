@@ -98,6 +98,41 @@ Run `M-x quelpa2` and enter a package name or repository specification to instal
 
 ---
 
+## Testing
+
+`quelpa2` uses Emacs's built-in `ERT` testing framework with isolated, temporary sandboxes so tests never affect your personal Emacs configuration or `package-user-dir`.
+
+### Running Tests Locally
+
+Use the included `Makefile` to run the test suite:
+
+* **Run the full test suite (including live network & recursive dependency tests):**
+  ```sh
+  make test
+  ```
+
+* **Run offline unit and sandbox tests only:**
+  ```sh
+  RUN_NETWORK_TESTS=0 make test
+  ```
+
+* **Test against a specific Emacs binary:**
+  ```sh
+  EMACS=/path/to/emacs make test
+  ```
+
+* **Clean up byte-compiled files:**
+  ```sh
+  make clean
+  ```
+
+### Test Architecture
+
+* **Offline Sandbox Tests:** Verify header parsing (`Package-Origin` and `Package-Requires-Origins`), spec normalization, and local Git repository dependency chains without touching external networks.
+* **Network Integration Tests:** Pull pinned revisions of real repositories (such as `quelpa-use-package` and `nav-flash`) to validate end-to-end `package-vc` checkout and recursive resolution in the wild.
+
+---
+
 ## Relationship to Original `quelpa`
 
 `quelpa2` is developed as a standalone, modern foundation designed to eventually serve as the next-generation backend for `quelpa`, allowing existing users to transition smoothly from recipe-based builds to native `package-vc` workflows.

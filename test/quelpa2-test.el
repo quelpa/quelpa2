@@ -117,5 +117,32 @@ Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
      ;; Clean up feature if loaded
      (when (featurep 'nav-flash) (unload-feature 'nav-flash t)))))
 
+;;; Integration Test: Real Ecosystem Package (`quelpa-use-package`)
+(ert-deftest quelpa2-test-quelpa-use-package-integration ()
+  "Test installing real `quelpa-use-package` at v0.0.2 and its recursive dependency `quelpa`.
+Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
+  :tags '(network)
+  (unless (equal (getenv "RUN_NETWORK_TESTS") "1")
+    (ert-skip "Skipping network-dependent test (set RUN_NETWORK_TESTS=1 to enable)."))
+
+  (quelpa2-with-sandbox
+   (unwind-protect
+       (progn
+         ;; Install quelpa-use-package pinned to your new tag v0.0.2
+         (quelpa2 '(quelpa-use-package :url "https://github.com/quelpa/quelpa-use-package"
+                                       :rev "0.0.2"))
+
+         ;; Verify both packages were successfully installed via recursive resolution
+         (should (package-installed-p 'quelpa-use-package))
+         (should (package-installed-p 'quelpa))
+
+         ;; Verify activation and loadability
+         (should (memq 'quelpa-use-package package-activated-list))
+         (should (require 'quelpa-use-package nil t)))
+
+     ;; Clean up features between runs
+     (when (featurep 'quelpa-use-package) (unload-feature 'quelpa-use-package t))
+     (when (featurep 'quelpa) (unload-feature 'quelpa t)))))
+
 (provide 'quelpa2-test)
 ;;; quelpa2-test.el ends here
