@@ -28,4 +28,4 @@ jobs:
         run: emacs --version
 
       - name: Run ERT Test Suite
-        run: emacs -Q -batch -L . -l test/quelpa2-test.el -f ert-run-tests-batch-and-exit
+        run: make test
