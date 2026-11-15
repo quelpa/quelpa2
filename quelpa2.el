@@ -2,6 +2,7 @@
 
 ;; Author: Reto Hubmann (@steckerhalter)
 ;; Version: 0.1.0
+;; Package-Origin: (quelpa2 :url "https://github.com/quelpa/quelpa2")
 ;; Package-Requires: ((emacs "29.1"))
 
 ;;; Commentary:
