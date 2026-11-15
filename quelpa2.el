@@ -33,11 +33,13 @@
 
 (defun quelpa2--read-header (header-name)
   "Read and parse Lisp sexp from HEADER-NAME in the current buffer.
-Returns nil if HEADER-NAME is absent or empty."
+Returns nil if HEADER-NAME is absent, empty, or malformed."
   (when-let* ((raw (lm-header header-name))
               (trimmed (string-trim raw)))
     (unless (string-empty-p trimmed)
-      (car (read-from-string trimmed)))))
+      (condition-case nil
+          (car (read-from-string trimmed))
+        ((end-of-file invalid-read-syntax) nil)))))
 
 (defun quelpa2--extract-all-headers (file)
   "Extract `Package-Requires', `Package-Origin', and `Package-Requires-Origins' from FILE.
