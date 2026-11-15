@@ -128,9 +128,9 @@ Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
   (quelpa2-with-sandbox
    (unwind-protect
        (progn
-         ;; Install quelpa-use-package pinned to your new tag v0.0.2
+         ;; Install quelpa-use-package pinned to your new tag v0.0.3
          (quelpa2 '(quelpa-use-package :url "https://github.com/quelpa/quelpa-use-package"
-                                       :rev "0.0.2"))
+                                       :rev "0.0.3"))
 
          ;; Verify both packages were successfully installed via recursive resolution
          (should (package-installed-p 'quelpa-use-package))
