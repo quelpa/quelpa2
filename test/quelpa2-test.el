@@ -106,7 +106,7 @@ Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
        (progn
          ;; Install a real, stable package pinned to a specific commit hash or tag
          ;; Example: nav-flash from GitHub
-         (quelpa2 '(nav-flash :url "https://github.com/steckerhalter/nav-flash"
+         (quelpa2 '(nav-flash :url "https://github.com/rolandwalker/nav-flash"
                               :rev "v1.1.2")) ; replace with a valid tag/commit
 
          ;; Verify installation and activation
