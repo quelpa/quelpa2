@@ -107,7 +107,7 @@ Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
          ;; Install a real, stable package pinned to a specific commit hash or tag
          ;; Example: nav-flash from GitHub
          (quelpa2 '(nav-flash :url "https://github.com/steckerhalter/nav-flash"
-                              :rev "v0.1.4")) ; replace with a valid tag/commit
+                              :rev "v1.1.2")) ; replace with a valid tag/commit
 
          ;; Verify installation and activation
          (should (package-installed-p 'nav-flash))
