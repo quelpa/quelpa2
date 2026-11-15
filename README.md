@@ -10,7 +10,7 @@
 
 ## Why `quelpa2`?
 
-Historically, installing Emacs packages directly from source repositories required maintaining entralized recipe registries—the problem original `quelpa` solved by fetching and building MELPA recipes locally.
+Historically, installing Emacs packages directly from source repositories required maintaining centralized recipe registries—the problem original `quelpa` solved by fetching and building MELPA recipes locally.
 
 With Emacs 29+, `package-vc-install` brought native version-control installation straight into core Emacs. However, `package-vc-install` still leaves two key gaps:
 1. **No recursive VC dependency resolution:** If Package A depends on Package B, and Package B is not on GNU ELPA or NonGNU ELPA, `package-vc-install` fails unless you manually install Package B first.
