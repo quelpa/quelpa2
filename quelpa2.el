@@ -1,109 +1,156 @@
-;;; quelpa2.el --- Next-gen decentralized package manager using package-vc -*- lexical-binding: t; -*-
+;;; quelpa2.el --- Next-gen decentralized package manager -*- lexical-binding: t; -*-
 
 ;; Author: Reto Hubmann (@steckerhalter)
 ;; Version: 0.1.0
 ;; Package-Origin: (quelpa2 :url "https://github.com/quelpa/quelpa2")
 ;; Package-Requires: ((emacs "29.1"))
+;; Keywords: tools, package, vc
 
 ;;; Commentary:
-;; Decentralized package manager built on top of Emacs 29+ `package-vc-install'.
-;; Supports `Package-Origin' for self-tracking/updates and multi-line
-;; `Package-Requires-Origins' for recursive dependency resolution.
+
+;; `quelpa2' is a lightweight, decentralized dependency-resolution layer built
+;; directly on top of Emacs 29+'s `package-vc-install'.  Packages declare their
+;; own upstream coordinates via `Package-Origin' and fallback dependency sources
+;; via `Package-Requires-Origins' using native `package-vc' specification lists:
+;;
+;;   ;; Package-Origin: (my-pkg :url "https://github.com/user/my-pkg")
+;;   ;; Package-Requires: ((emacs "29.1") (dep-a "1.0"))
+;;   ;; Package-Requires-Origins: ((dep-a :url "https://github.com/user/dep-a"))
 
 ;;; Code:
 
+(require 'cl-lib)
+(require 'lisp-mnt)
 (require 'package)
 (require 'package-vc)
-(require 'cl-lib)
+
+(defgroup quelpa2 nil
+  "Decentralized, registry-free package management built on `package-vc'."
+  :group 'package
+  :prefix "quelpa2-")
+
+;;;; Header Extraction
+
+(defun quelpa2--read-header (header-name)
+  "Read and parse Lisp sexp from HEADER-NAME in the current buffer.
+Returns nil if HEADER-NAME is absent or empty."
+  (when-let* ((raw (lm-header header-name))
+              (trimmed (string-trim raw)))
+    (unless (string-empty-p trimmed)
+      (car (read-from-string trimmed)))))
 
 (defun quelpa2--extract-all-headers (file)
-  "Extract `Package-Requires', `Package-Origin', and `Package-Requires-Origins' from FILE."
-  (let ((requires nil)
-        (origin   nil)
-        (origins  nil))
+  "Extract `Package-Requires', `Package-Origin', and `Package-Requires-Origins' from FILE.
+Returns a list of three elements: (REQUIRES ORIGIN REQUIRES-ORIGINS)."
+  (when (and file (file-readable-p file))
     (with-temp-buffer
-      (insert-file-contents file nil nil 4000)
+      (insert-file-contents file)
+      (list (quelpa2--read-header "Package-Requires")
+            (quelpa2--read-header "Package-Origin")
+            (quelpa2--read-header "Package-Requires-Origins")))))
 
-      ;; 1. Parse Package-Requires
-      (goto-char (point-min))
-      (when (re-search-forward "^;; Package-Requires:[ \t]*\\(.+\\)" nil t)
-        (setq requires (ignore-errors (read (match-string 1)))))
-
-      ;; 2. Parse Package-Origin (Single plist for this package)
-      (goto-char (point-min))
-      (when (re-search-forward "^;; Package-Origin:[ \t]*\\(.+\\)" nil t)
-        (setq origin (ignore-errors (read (match-string 1)))))
-
-      ;; 3. Parse Package-Requires-Origins (Multi-line list for dependency origins)
-      (goto-char (point-min))
-      (when (re-search-forward "^;; Package-Requires-Origins:[ \t]*\\(.*\n\\(;;[ \t].*\n\\)*\\)" nil t)
-        (let ((raw-block (match-string 1)))
-          (with-temp-buffer
-            (insert raw-block)
-            (goto-char (point-min))
-            (while (re-search-forward "^;*[ \t]*" nil t)
-              (replace-match ""))
-            (goto-char (point-min))
-            (setq origins (ignore-errors (read (current-buffer))))))))
-    (values requires origin origins)))
-
-(defun quelpa2--get-installed-origin (pkg-name)
-  "Look up `Package-Origin' header from an already installed PKG-NAME."
+(defun quelpa2--find-package-main-file (pkg-name)
+  "Locate the primary `.el' file for installed PKG-NAME."
   (when-let* ((desc (cadr (assq pkg-name package-alist)))
-              (dir (package-desc-dir desc))
-              (main-file (expand-file-name (concat (symbol-name pkg-name) ".el") dir)))
-    (when (file-exists-p main-file)
-      (cl-multiple-value-bind (_reqs origin _orgs) (quelpa2--extract-all-headers main-file)
-        origin))))
+              (dir (package-desc-dir desc)))
+    (let ((candidate (expand-file-name (format "%s.el" pkg-name) dir)))
+      (when (file-readable-p candidate)
+        candidate))))
 
-(defun quelpa2--resolve-dependencies (pkg-name)
-  "Inspect PKG-NAME's installed source directory for dependencies and resolve them."
-  (when-let* ((desc (cadr (assq pkg-name package-alist)))
-              (dir (package-desc-dir desc))
-              (main-file (expand-file-name (concat (symbol-name pkg-name) ".el") dir)))
-    (when (file-exists-p main-file)
-      (cl-multiple-value-bind (requires _origin origins) (quelpa2--extract-all-headers main-file)
-        (dolist (req requires)
-          (let ((dep-name (car req)))
-            (unless (or (eq dep-name 'emacs) (package-installed-p dep-name))
-              (message "quelpa2: Resolving dependency `%s' for `%s'" dep-name pkg-name)
-              (condition-case nil
-                  (package-install dep-name)
-                (error
-                 (if-let ((origin-plist (cdr (assq dep-name origins))))
-                     (quelpa2 (cons dep-name origin-plist))
-                   (error "quelpa2: Dependency `%s' required by `%s' not found" dep-name pkg-name))))
-              (quelpa2--resolve-dependencies dep-name))))))))
+;;;; Specification Normalization
+
+(defun quelpa2--normalize-spec (pkg-or-spec)
+  "Normalize PKG-OR-SPEC into a `(NAME . PLIST)' VC spec, or nil if only a symbol.
+Accepts:
+- A symbol `foo' -> returns nil (requires lookup via `Package-Origin' or archives)
+- A URL string \"https://...\" -> derives name from URL and returns `(name :url URL)'
+- A VC spec list `(foo :url \"...\")' -> returned directly."
+  (cond
+   ((consp pkg-or-spec)
+    pkg-or-spec)
+   ((stringp pkg-or-spec)
+    (let ((name (intern (file-name-base (directory-file-name pkg-or-spec)))))
+      (list name :url pkg-or-spec)))
+   ((symbolp pkg-or-spec)
+    nil)
+   (t
+    (user-error "Invalid package specification: %S" pkg-or-spec))))
+
+;;;; Recursive Dependency Resolution
+
+(defun quelpa2--resolve-dependencies (pkg-name &optional visited)
+  "Inspect installed PKG-NAME and recursively install missing dependencies.
+VISITED tracks already-processed package symbols to prevent cycles."
+  (unless (memq pkg-name visited)
+    (let* ((visited (cons pkg-name visited))
+           (main-file (quelpa2--find-package-main-file pkg-name))
+           (headers (quelpa2--extract-all-headers main-file))
+           (requires (nth 0 headers))
+           (origins-map (nth 2 headers)))
+      (dolist (req requires)
+        (let ((dep-name (car req)))
+          (unless (or (eq dep-name 'emacs)
+                      (package-installed-p dep-name))
+            ;; 1. EAFP: Try standard configured ELPA archives first
+            (condition-case nil
+                (progn
+                  (unless package-archive-contents
+                    (package-refresh-contents))
+                  (package-install dep-name))
+              (error
+               ;; 2. Fallback: Look up `(dep-name :url ...)' in Package-Requires-Origins
+               (if-let ((dep-spec (assq dep-name origins-map)))
+                   (progn
+                     (message "quelpa2: Resolving %s via Package-Requires-Origins..." dep-name)
+                     (package-vc-install dep-spec)
+                     (quelpa2--resolve-dependencies dep-name visited))
+                 (error "quelpa2: Dependency `%s' required by `%s' not found in archives or Package-Requires-Origins"
+                        dep-name pkg-name))))))))))
+
+;;;; Public Entry Point
 
 ;;;###autoload
-(defun quelpa2 (repo-desc &optional backend)
-  "Install or update a package using REPO-DESC (URL, spec list, or symbol),
-automatically resolving dependencies via archives or `Package-Requires-Origins'."
-  (interactive "sPackage or URL spec: ")
-  (let* ((pkg-name (cond
-                    ((symbolp repo-desc) repo-desc)
-                    ((consp repo-desc) (car repo-desc))
-                    (t nil)))
-         ;; If given a symbol, check if it's already installed and has a Package-Origin header
-         (resolved-desc
-          (if (and (symbolp repo-desc) (not (assoc repo-desc package-archive-contents)))
-              (if-let ((local-origin (quelpa2--get-installed-origin repo-desc)))
-                  (cons repo-desc local-origin)
-                repo-desc)
-            repo-desc)))
-
-    ;; Execute installation / update via package-install or package-vc-install
+(defun quelpa2 (pkg-or-spec)
+  "Install or upgrade PKG-OR-SPEC and recursively resolve its VC dependencies.
+PKG-OR-SPEC can be:
+- A VC specification list, e.g. `(my-pkg :url \"https://github.com/user/my-pkg\")'
+- A repository URL string, e.g. \"https://github.com/user/my-pkg\"
+- A package symbol `my-pkg' (resolved from its installed `Package-Origin'
+  header or standard `package-archives')."
+  (interactive
+   (list (read-from-minibuffer "Package symbol or VC spec: " nil nil t)))
+  (let ((spec (quelpa2--normalize-spec pkg-or-spec)))
     (cond
-     ((symbolp resolved-desc)
-      (condition-case nil
-          (package-install resolved-desc)
-        (error (user-error "quelpa2: Package `%s' not in archives and no local Package-Origin found" resolved-desc))))
-     (t
-      (package-vc-install resolved-desc backend)))
+     ;; Case 1: Explicit VC spec or URL provided
+     (spec
+      (let ((pkg-name (car spec)))
+        (if (package-installed-p pkg-name)
+            (package-vc-upgrade (cadr (assq pkg-name package-alist)))
+          (package-vc-install spec))
+        (quelpa2--resolve-dependencies pkg-name)))
 
-    ;; Trigger recursive dependency resolution
-    (when pkg-name
-      (quelpa2--resolve-dependencies pkg-name))))
+     ;; Case 2: Bare symbol provided (e.g. `(quelpa2 'quelpa2)')
+     ((symbolp pkg-or-spec)
+      (let* ((pkg-name pkg-or-spec)
+             (main-file (quelpa2--find-package-main-file pkg-name))
+             (origin-spec (nth 1 (quelpa2--extract-all-headers main-file))))
+        (cond
+         ;; Already installed with a `(name :url ...)' Package-Origin header
+         ((and origin-spec (consp origin-spec))
+          (if (package-installed-p pkg-name)
+              (package-vc-upgrade (cadr (assq pkg-name package-alist)))
+            (package-vc-install origin-spec))
+          (quelpa2--resolve-dependencies pkg-name))
+         ;; Already installed without Package-Origin: delegate to package-vc-upgrade
+         ((package-installed-p pkg-name)
+          (package-vc-upgrade (cadr (assq pkg-name package-alist)))
+          (quelpa2--resolve-dependencies pkg-name))
+         ;; Not installed yet: fall back to standard ELPA archives
+         (t
+          (unless package-archive-contents
+            (package-refresh-contents))
+          (package-install pkg-name)
+          (quelpa2--resolve-dependencies pkg-name))))))))
 
 (provide 'quelpa2)
 ;;; quelpa2.el ends here
