@@ -71,27 +71,51 @@
 (ert-deftest quelpa2-test-recursive-vc-install ()
   "Test installing `mock-pkg-a' which recursively pulls `mock-dep-b' via `Package-Requires-Origins'."
   (quelpa2-with-sandbox
-    (unwind-protect
-        (let* ((repos-dir (expand-file-name "repos" sandbox-dir))
-               (repo-b (quelpa2-test--create-mock-repo
-                        repos-dir 'mock-dep-b
-                        '(";; Package-Requires: ((emacs \"29.1\"))")))
-               (repo-a (quelpa2-test--create-mock-repo
-                        repos-dir 'mock-pkg-a
-                        (list ";; Package-Requires: ((emacs \"29.1\") (mock-dep-b \"0.1.0\"))"
-                              (format ";; Package-Origin: (mock-pkg-a :url %S)" (expand-file-name "mock-pkg-a" repos-dir))
-                              (format ";; Package-Requires-Origins: ((mock-dep-b :url %S))" repo-b)))))
-          ;; Install mock-pkg-a via quelpa2
-          (quelpa2 `(mock-pkg-a :url ,repo-a))
-          ;; Verify both packages are installed
-          (should (package-installed-p 'mock-pkg-a))
-          (should (package-installed-p 'mock-dep-b))
-          ;; Verify parent package was activated after dependency resolution
-          (should (memq 'mock-pkg-a package-activated-list))
-          (should (require 'mock-pkg-a nil t)))
-      ;; Clean up loaded mock features safely if present
-      (when (featurep 'mock-pkg-a) (unload-feature 'mock-pkg-a t))
-      (when (featurep 'mock-dep-b) (unload-feature 'mock-dep-b t)))))
+   (unwind-protect
+       (let* ((repos-dir (expand-file-name "repos" sandbox-dir))
+              (repo-b (quelpa2-test--create-mock-repo
+                       repos-dir 'mock-dep-b
+                       '(";; Package-Requires: ((emacs \"29.1\"))")))
+              (repo-a (quelpa2-test--create-mock-repo
+                       repos-dir 'mock-pkg-a
+                       (list ";; Package-Requires: ((emacs \"29.1\") (mock-dep-b \"0.1.0\"))"
+                             (format ";; Package-Origin: (mock-pkg-a :url %S)" (expand-file-name "mock-pkg-a" repos-dir))
+                             (format ";; Package-Requires-Origins: ((mock-dep-b :url %S))" repo-b)))))
+         ;; Install mock-pkg-a via quelpa2
+         (quelpa2 `(mock-pkg-a :url ,repo-a))
+         ;; Verify both packages are installed
+         (should (package-installed-p 'mock-pkg-a))
+         (should (package-installed-p 'mock-dep-b))
+         ;; Verify parent package was activated after dependency resolution
+         (should (memq 'mock-pkg-a package-activated-list))
+         (should (require 'mock-pkg-a nil t)))
+     ;; Clean up loaded mock features safely if present
+     (when (featurep 'mock-pkg-a) (unload-feature 'mock-pkg-a t))
+     (when (featurep 'mock-dep-b) (unload-feature 'mock-dep-b t)))))
+
+;;; Integration Test: Real External Package (Gated & Pinned)
+(ert-deftest quelpa2-test-real-package-integration ()
+  "Test installing a real public repository via quelpa2.
+Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
+  :tags '(network)
+  (unless (equal (getenv "RUN_NETWORK_TESTS") "1")
+    (ert-skip "Skipping network-dependent test (set RUN_NETWORK_TESTS=1 to enable)."))
+
+  (quelpa2-with-sandbox
+   (unwind-protect
+       (progn
+         ;; Install a real, stable package pinned to a specific commit hash or tag
+         ;; Example: nav-flash from GitHub
+         (quelpa2 '(nav-flash :url "https://github.com/steckerhalter/nav-flash"
+                              :rev "v0.1.4")) ; replace with a valid tag/commit
+
+         ;; Verify installation and activation
+         (should (package-installed-p 'nav-flash))
+         (should (memq 'nav-flash package-activated-list))
+         (should (require 'nav-flash nil t)))
+
+     ;; Clean up feature if loaded
+     (when (featurep 'nav-flash) (unload-feature 'nav-flash t)))))
 
 (provide 'quelpa2-test)
 ;;; quelpa2-test.el ends here
