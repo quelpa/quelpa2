@@ -86,15 +86,17 @@ VISITED tracks already-processed package symbols to prevent cycles."
            (main-file (quelpa2--find-package-main-file pkg-name))
            (headers (quelpa2--extract-all-headers main-file))
            (requires (nth 0 headers))
-           (origins-map (nth 2 headers)))
+           (origins-map (nth 2 headers))
+           (installed-any nil))
       (dolist (req requires)
         (let ((dep-name (car req)))
           (unless (or (eq dep-name 'emacs)
                       (package-installed-p dep-name))
+            (setq installed-any t)
             ;; 1. EAFP: Try standard configured ELPA archives first
             (condition-case nil
                 (progn
-                  (unless package-archive-contents
+                  (when (and package-archives (not package-archive-contents))
                     (package-refresh-contents))
                   (package-install dep-name))
               (error
@@ -105,7 +107,10 @@ VISITED tracks already-processed package symbols to prevent cycles."
                      (package-vc-install dep-spec)
                      (quelpa2--resolve-dependencies dep-name visited))
                  (error "quelpa2: Dependency `%s' required by `%s' not found in archives or Package-Requires-Origins"
-                        dep-name pkg-name))))))))))
+                        dep-name pkg-name)))))))
+      ;; Re-activate PKG-NAME if new dependencies were installed after it
+      (when installed-any
+        (package-activate pkg-name)))))
 
 ;;;; Public Entry Point
 

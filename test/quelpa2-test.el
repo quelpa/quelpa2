@@ -9,6 +9,8 @@
   (declare (indent 0))
   `(let* ((sandbox-dir (make-temp-file "quelpa2-sandbox-" t))
           (package-user-dir (expand-file-name "elpa" sandbox-dir))
+          (package-archives nil)
+          (package-archive-contents nil)
           (package-alist nil)
           (package-activated-list nil)
           (package-vc-selected-packages nil))
@@ -69,20 +71,27 @@
 (ert-deftest quelpa2-test-recursive-vc-install ()
   "Test installing `mock-pkg-a' which recursively pulls `mock-dep-b' via `Package-Requires-Origins'."
   (quelpa2-with-sandbox
-   (let* ((repos-dir (expand-file-name "repos" sandbox-dir))
-          (repo-b (quelpa2-test--create-mock-repo
-                   repos-dir 'mock-dep-b
-                   '(";; Package-Requires: ((emacs \"29.1\"))")))
-          (repo-a (quelpa2-test--create-mock-repo
-                   repos-dir 'mock-pkg-a
-                   (list ";; Package-Requires: ((emacs \"29.1\") (mock-dep-b \"0.1.0\"))"
-                         (format ";; Package-Origin: (mock-pkg-a :url %S)" (expand-file-name "mock-pkg-a" repos-dir))
-                         (format ";; Package-Requires-Origins: ((mock-dep-b :url %S))" repo-b)))))
-     ;; Install mock-pkg-a via quelpa2 using its local repo path/spec
-     (quelpa2 `(mock-pkg-a :url ,repo-a))
-     ;; Verify both parent and transitive dependency were installed cleanly
-     (should (package-installed-p 'mock-pkg-a))
-     (should (package-installed-p 'mock-dep-b)))))
+    (unwind-protect
+        (let* ((repos-dir (expand-file-name "repos" sandbox-dir))
+               (repo-b (quelpa2-test--create-mock-repo
+                        repos-dir 'mock-dep-b
+                        '(";; Package-Requires: ((emacs \"29.1\"))")))
+               (repo-a (quelpa2-test--create-mock-repo
+                        repos-dir 'mock-pkg-a
+                        (list ";; Package-Requires: ((emacs \"29.1\") (mock-dep-b \"0.1.0\"))"
+                              (format ";; Package-Origin: (mock-pkg-a :url %S)" (expand-file-name "mock-pkg-a" repos-dir))
+                              (format ";; Package-Requires-Origins: ((mock-dep-b :url %S))" repo-b)))))
+          ;; Install mock-pkg-a via quelpa2
+          (quelpa2 `(mock-pkg-a :url ,repo-a))
+          ;; Verify both packages are installed
+          (should (package-installed-p 'mock-pkg-a))
+          (should (package-installed-p 'mock-dep-b))
+          ;; Verify parent package was activated after dependency resolution
+          (should (memq 'mock-pkg-a package-activated-list))
+          (should (require 'mock-pkg-a nil t)))
+      ;; Clean up loaded mock features safely if present
+      (when (featurep 'mock-pkg-a) (unload-feature 'mock-pkg-a t))
+      (when (featurep 'mock-dep-b) (unload-feature 'mock-dep-b t)))))
 
 (provide 'quelpa2-test)
 ;;; quelpa2-test.el ends here
