@@ -58,6 +58,36 @@
             (should (equal origins '((dep-a :url "https://example.com/dep-a"))))))
       (delete-file temp-el))))
 
+;;; Unit Test: Malformed Header Parsing
+(ert-deftest quelpa2-test-read-header-malformed ()
+  "Ensure `quelpa2--read-header' handles malformed headers gracefully
+without signaling an end-of-file or invalid-read-syntax error."
+  (let ((temp-el (make-temp-file "quelpa2-hdr-" nil ".el")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-el
+            (insert ";;; demo.el --- Demo -*- lexical-binding: t; -*-\n"
+                    ";; Package-Requires: (\n"))
+          (with-temp-buffer
+            (insert-file-contents temp-el)
+            (should (null (quelpa2--read-header "Package-Requires")))))
+      (delete-file temp-el))))
+
+;;; Unit Test: Missing package-desc
+(ert-deftest quelpa2-test-missing-package-desc-handling ()
+  "Ensure `quelpa2' handles the edge case where `package-installed-p' 
+is true but `package-alist' lacks a descriptor, preventing `wrong-type-argument'."
+  (quelpa2-with-sandbox
+   (let ((installed-called nil))
+     (cl-letf (((symbol-function 'package-installed-p) (lambda (_) t))
+               ((symbol-function 'package-vc-install) (lambda (_spec) (setq installed-called t)))
+               (package-alist nil))
+       ;; Ensure it doesn't throw wrong-type-argument and successfully hits the fallback
+       (should-not (condition-case err
+                       (quelpa2 '(dummy-pkg :url "https://github.com/example/dummy-pkg"))
+                     (wrong-type-argument err)))
+       (should installed-called)))))
+
 ;;; Unit Test: Spec Normalization
 (ert-deftest quelpa2-test-normalize-spec ()
   "Verify `quelpa2--normalize-spec' correctly handles symbols, strings, and specs."

@@ -131,8 +131,8 @@ PKG-OR-SPEC can be:
      ;; Case 1: Explicit VC spec or URL provided
      (spec
       (let ((pkg-name (car spec)))
-        (if (package-installed-p pkg-name)
-            (package-vc-upgrade (cadr (assq pkg-name package-alist)))
+        (if-let ((desc (cadr (assq pkg-name package-alist))))
+            (package-vc-upgrade desc)
           (package-vc-install spec))
         (quelpa2--resolve-dependencies pkg-name)))
 
@@ -140,17 +140,19 @@ PKG-OR-SPEC can be:
      ((symbolp pkg-or-spec)
       (let* ((pkg-name pkg-or-spec)
              (main-file (quelpa2--find-package-main-file pkg-name))
-             (origin-spec (nth 1 (quelpa2--extract-all-headers main-file))))
+             (origin-spec (and main-file (nth 1 (quelpa2--extract-all-headers main-file)))))
         (cond
          ;; Already installed with a `(name :url ...)' Package-Origin header
          ((and origin-spec (consp origin-spec))
-          (if (package-installed-p pkg-name)
-              (package-vc-upgrade (cadr (assq pkg-name package-alist)))
+          (if-let ((desc (cadr (assq pkg-name package-alist))))
+              (package-vc-upgrade desc)
             (package-vc-install origin-spec))
           (quelpa2--resolve-dependencies pkg-name))
-         ;; Already installed without Package-Origin: delegate to package-vc-upgrade
+         ;; Already installed without Package-Origin: delegate to package-vc-upgrade if descriptor exists
          ((package-installed-p pkg-name)
-          (package-vc-upgrade (cadr (assq pkg-name package-alist)))
+          (if-let ((desc (cadr (assq pkg-name package-alist))))
+              (package-vc-upgrade desc)
+            (message "Package %s is installed but lacks a package-alist descriptor." pkg-name))
           (quelpa2--resolve-dependencies pkg-name))
          ;; Not installed yet: fall back to standard ELPA archives
          (t
