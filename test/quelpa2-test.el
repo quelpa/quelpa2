@@ -75,7 +75,7 @@ without signaling an end-of-file or invalid-read-syntax error."
 
 ;;; Unit Test: Missing package-desc
 (ert-deftest quelpa2-test-missing-package-desc-handling ()
-  "Ensure `quelpa2' handles the edge case where `package-installed-p' 
+  "Ensure `quelpa2' handles the edge case where `package-installed-p'
 is true but `package-alist' lacks a descriptor, preventing `wrong-type-argument'."
   (quelpa2-with-sandbox
    (let ((installed-called nil))
