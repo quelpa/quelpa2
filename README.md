@@ -1,5 +1,3 @@
-**THIS IS IN EARLY DEVELOPMENT, IT MIGHT NOT WORK AT ALL OR CAUSE YOU A HEADACHE**
-
 # quelpa2
 
 [![Build Status](https://github.com/quelpa/quelpa2/actions/workflows/ci.yml/badge.svg)](https://github.com/quelpa/quelpa2/actions/workflows/ci.yml)
@@ -16,11 +14,13 @@ Historically, installing Emacs packages directly from source repositories requir
 
 With Emacs 29+, `package-vc-install` brought native version-control installation straight into core Emacs. However, `package-vc-install` still leaves two key gaps:
 1. **No recursive VC dependency resolution:** If Package A depends on Package B, and Package B is not on GNU ELPA or NonGNU ELPA, `package-vc-install` fails unless you manually install Package B first.
-2. **External recipe dependency:** Without a central registry, there is no standard place for a package to tell Emacs *where* its non-ELPA dependencies live, or *where* the package itself came from if installed manually.
+2. **External recipe dependency:** Without a central registry, there is no standard place for a package to tell Emacs how to be built and where to fetch and build its dependencies from.
 
 `quelpa2` bridges this gap with zero external registries.
 
 **The vision**:  Every package carries its own self-contained origin metadata in its header comments—making the Emacs package ecosystem completely decentralized while remaining 100% backwards-compatible with existing Emacs tooling.
+
+So far so good. Since this project has only just been started, almost no packages include the mentioned headers. Every maintainer that adopts these headers contributes to a truly decentralized Emacs ecosystem, but adoption could take a while. Who knows? People might not care and everything stays fragmented over different package managers, repositories etc. But it's worth a try, isn't it? So there you have it... 
 
 ---
 
