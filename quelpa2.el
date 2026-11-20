@@ -1,7 +1,7 @@
 ;;; quelpa2.el --- Next-gen decentralized package manager -*- lexical-binding: t; -*-
 
 ;; Author: Reto Hubmann (@steckerhalter)
-;; Version: 0.1.0
+;; Version: 0.1.3
 ;; Package-Origin: (quelpa2 :url "https://github.com/quelpa/quelpa2")
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools, package, vc
@@ -132,6 +132,31 @@ VISITED tracks already-processed package symbols to prevent cycles."
       (when installed-any
         (package-activate pkg-name)))))
 
+;;;; Self-Upgrade
+
+(defvar quelpa2--self-upgrade-done nil
+  "Non-nil once the self-upgrade has run.")
+
+(defcustom quelpa-self-update-p t
+  "Whether `quelpa2' should upgrade the installed `quelpa2' on first call.
+The upgrade happens once, on the first invocation of `quelpa2', from the
+installed package's VC repository; the new version is then loaded.
+Set to nil to turn this off."
+  :type 'boolean
+  :group 'quelpa2)
+
+(defun quelpa2--self-upgrade ()
+  "Upgrade the installed `quelpa2' from its VC repository and load the new one.
+If `quelpa2' is not installed or not installed from a VC repository, do nothing."
+  (when-let* ((desc (and (package-installed-p 'quelpa2)
+                         (cadr (assq 'quelpa2 package-alist)))))
+    (when (package-vc-p desc)
+      (package-vc-upgrade desc)
+      ;; Re-load the updated file so the new version takes effect.
+      (let ((file (expand-file-name "quelpa2.el" (package-desc-dir desc))))
+        (when (file-exists-p file)
+          (load file))))))
+
 ;;;; Public Entry Point
 
 ;;;###autoload
@@ -141,9 +166,18 @@ PKG-OR-SPEC can be:
 - A VC specification list, e.g. `(my-pkg :url \"https://github.com/user/my-pkg\")'
 - A repository URL string, e.g. \"https://github.com/user/my-pkg\"
 - A package symbol `my-pkg' (resolved from its installed `Package-Origin'
-  header or standard `package-archives')."
+  header or standard `package-archives').
+
+The first time `quelpa2' is called, the installed `quelpa2' itself is
+upgraded from its VC repository and the new version is loaded, unless
+`quelpa-self-update-p' is nil."
   (interactive
    (list (read-from-minibuffer "Package symbol or VC spec: " nil nil t)))
+  (unless (or quelpa2--self-upgrade-done (null quelpa-self-update-p))
+    (setq quelpa2--self-upgrade-done t)
+    (condition-case err
+        (quelpa2--self-upgrade)
+      (error (message "quelpa2: self-upgrade failed: %s" err))))
   (let ((spec (quelpa2--normalize-spec pkg-or-spec)))
     (cond
      ;; Case 1: Explicit VC spec or URL provided
