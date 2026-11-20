@@ -2,6 +2,8 @@
 
 # quelpa2
 
+[![Build Status](https://github.com/quelpa/quelpa2/actions/workflows/ci.yml/badge.svg)](https://github.com/quelpa/quelpa2/actions/workflows/ci.yml)
+
 **Decentralized, registry-free package management for Emacs 29+.**
 
 `quelpa2` is a lightweight dependency-resolution layer built directly on top of Emacs's built-in `package-vc-install`. It eliminates the need for centralized recipe repositories by allowing Emacs Lisp packages to declare their own upstream coordinates and fallback dependency origins directly inside standard file headers.
@@ -95,6 +97,19 @@ If the package is already installed and includes a `Package-Origin` header (or e
 
 ### Interactive Use
 Run `M-x quelpa2` and enter a package name or repository specification to install and recursively resolve all dependencies.
+
+## Update Flags
+
+Two flags control upgrades:
+
+* **`quelpa-self-update-p`** (default `t`): whether `quelpa2` upgrades the
+  installed `quelpa2` itself the first time it is called. Set it to nil to
+  turn this off.
+* **`quelpa2-update-p`** (default `nil`): whether `quelpa2` upgrades
+  already-installed packages. The per-specification `:update` keyword takes
+  precedence, e.g. `(quelpa2 '(foo :url "..." :update t))`.
+
+With the defaults, already-installed packages are left alone at startup.
 
 ---
 
