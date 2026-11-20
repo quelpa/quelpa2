@@ -29,6 +29,24 @@
   :group 'package
   :prefix "quelpa2-")
 
+;;;; Update Policy
+
+(defcustom quelpa2-update-p nil
+  "Whether `quelpa2' should upgrade already-installed packages.
+When non-nil, `quelpa2' upgrades an already-installed package from its
+VC repository.  When nil (the default), already-installed packages are
+left alone so startup stays fast: updates happen where explicitly
+requested via the `:update' keyword of a `quelpa2' specification."
+  :type 'boolean
+  :group 'quelpa2)
+
+(defun quelpa2--should-update-p (pkg plist)
+  "Return non-nil if PKG should be updated based on PLIST and `quelpa2-update-p'.
+`:update' in PLIST takes precedence over `quelpa2-update-p'."
+  (if (plist-member plist :update)
+      (plist-get plist :update)
+    quelpa2-update-p))
+
 ;;;; Header Extraction
 
 (defun quelpa2--read-header (header-name)
@@ -133,7 +151,10 @@ PKG-OR-SPEC can be:
       (let* ((pkg-name (car spec))
              (desc (cadr (assq pkg-name package-alist))))
         (if (and desc (package-vc-p desc))
-            (package-vc-upgrade desc)
+            ;; Already installed: upgrade only when updates are requested
+            ;; (`quelpa2-update-p' or `:update' in the spec).
+            (when (quelpa2--should-update-p pkg-name (cdr spec))
+              (package-vc-upgrade desc))
           (package-vc-install spec))
         (quelpa2--resolve-dependencies pkg-name)))
 
