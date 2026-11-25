@@ -1,7 +1,7 @@
 ;;; quelpa2.el --- Next-gen decentralized package manager -*- lexical-binding: t; -*-
 
 ;; Author: Reto Hubmann (@steckerhalter)
-;; Version: 0.1.3
+;; Version: 0.1.4
 ;; Package-Origin: (quelpa2 :url "https://github.com/quelpa/quelpa2")
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools, package, vc
