@@ -79,6 +79,21 @@ Or with `use-package` (Emacs 29+):
 
 ---
 
+## Optional Dependency: [`pvrecipe`](https://github.com/quelpa/pvrecipe)
+
+The library **`pvrecipe`** can be installed to look up MELPA recipes and translate them into
+`package-vc` specifications, so dependencies without a `Package-Requires-Origins` entry can still be resolved and installed.
+
+To install `pvrecipe` with `quelpa2` use:
+
+```elisp
+(quelpa2 '(pvrecipe :url "https://github.com/quelpa/pvrecipe"))
+```
+
+After that the MELPA-recipe fallback is active in `quelpa2`.
+
+---
+
 ## Usage
 
 `quelpa2` mirrors the argument signature of `package-vc-install`, accepting a package symbol, a URL string, or a full VC specification list:

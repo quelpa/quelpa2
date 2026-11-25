@@ -1,7 +1,8 @@
 ;;; quelpa2.el --- Next-gen decentralized package manager -*- lexical-binding: t; -*-
 
 ;; Author: Reto Hubmann (@steckerhalter)
-;; Version: 0.1.4
+;; Version: 0.1.6
+;; URL: https://github.com/quelpa/quelpa2
 ;; Package-Origin: (quelpa2 :url "https://github.com/quelpa/quelpa2")
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools, package, vc
@@ -16,6 +17,9 @@
 ;;   ;; Package-Origin: (my-pkg :url "https://github.com/user/my-pkg")
 ;;   ;; Package-Requires: ((emacs "29.1") (dep-a "1.0"))
 ;;   ;; Package-Requires-Origins: ((dep-a :url "https://github.com/user/dep-a"))
+;;
+;; The `pvrecipe` library is optional: when installed, quelpa2 uses it
+;; as a fallback to look up MELPA recipes for dependencies without origins.
 
 ;;; Code:
 
@@ -138,14 +142,24 @@ VISITED tracks already-processed package symbols to prevent cycles."
                       (package-upgrade dep-name)
                     (package-install dep-name)))
               (error
-               ;; 2. Fallback: Look up `(dep-name :url ...)' in Package-Requires-Origins
-               (if-let ((dep-spec (assq dep-name origins-map)))
-                   (progn
-                     (message "quelpa2: Resolving %s via Package-Requires-Origins..." dep-name)
-                     (package-vc-install dep-spec)
-                     (quelpa2--resolve-dependencies dep-name visited))
-                 (error "quelpa2: Dependency `%s' required by `%s' not found in archives or Package-Requires-Origins"
-                        dep-name pkg-name)))))))
+               ;; 2. Fallback: Look up `(dep-name :url ...)' in
+               ;; Package-Requires-Origins; if there is none, try the
+               ;; `pvrecipe' library for the MELPA recipe of the
+               ;; dependency.
+               (cond ((assq dep-name origins-map)
+                      (let ((dep-spec (assq dep-name origins-map)))
+                        (message "quelpa2: Resolving %s via Package-Requires-Origins..." dep-name)
+                        (package-vc-install dep-spec)
+                        (quelpa2--resolve-dependencies dep-name visited)))
+                     ((and (require 'pvrecipe nil t)
+                           (when-let* ((spec (pvrecipe dep-name)))
+                             (message "quelpa2: Resolving %s via MELPA recipe (pvrecipe)..." dep-name)
+                             (package-vc-install spec)
+                             (quelpa2--resolve-dependencies dep-name visited)
+                             t)))
+                     (t
+                      (error "quelpa2: Dependency `%s' required by `%s' not found in archives or Package-Requires-Origins"
+                             dep-name pkg-name))))))))
       ;; Re-activate PKG-NAME if new dependencies were installed after it
       (when installed-any
         (package-activate pkg-name)))))
