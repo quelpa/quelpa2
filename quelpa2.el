@@ -98,8 +98,19 @@ Accepts:
 
 ;;;; Recursive Dependency Resolution
 
+(defun quelpa2--dep-version (req)
+  "Return the version required by dependency entry REQ as a version list.
+REQ is an element of the `Package-Requires' header: (NAME VERSION)."
+  (when (cdr req)
+    (let ((ver (cadr req)))
+      (cond ((null ver) nil)
+            ((stringp ver) (version-to-list ver))
+            (t ver)))))
+
 (defun quelpa2--resolve-dependencies (pkg-name &optional visited)
   "Inspect installed PKG-NAME and recursively install missing dependencies.
+A dependency that is installed at an older version than the one required
+by PKG-NAME is upgraded as well.
 VISITED tracks already-processed package symbols to prevent cycles."
   (unless (memq pkg-name visited)
     (let* ((visited (cons pkg-name visited))
@@ -109,16 +120,23 @@ VISITED tracks already-processed package symbols to prevent cycles."
            (origins-map (nth 2 headers))
            (installed-any nil))
       (dolist (req requires)
-        (let ((dep-name (car req)))
+        (let* ((dep-name (car req))
+               (dep-version (quelpa2--dep-version req)))
           (unless (or (eq dep-name 'emacs)
-                      (package-installed-p dep-name))
+                      (and (package-installed-p dep-name)
+                           (or (null dep-version)
+                               (package-installed-p dep-name dep-version))))
             (setq installed-any t)
             ;; 1. EAFP: Try standard configured ELPA archives first
             (condition-case nil
                 (progn
                   (when (and package-archives (not package-archive-contents))
                     (package-refresh-contents))
-                  (package-install dep-name))
+                  (if (and dep-version
+                           (package-installed-p dep-name))
+                      ;; Installed but older than required: upgrade it.
+                      (package-upgrade dep-name)
+                    (package-install dep-name)))
               (error
                ;; 2. Fallback: Look up `(dep-name :url ...)' in Package-Requires-Origins
                (if-let ((dep-spec (assq dep-name origins-map)))

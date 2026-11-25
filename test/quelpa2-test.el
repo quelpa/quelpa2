@@ -174,5 +174,87 @@ Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
      (when (featurep 'quelpa-use-package) (unload-feature 'quelpa-use-package t))
      (when (featurep 'quelpa) (unload-feature 'quelpa t)))))
 
+
+;;; Unit Tests: dependency version requirements
+
+(ert-deftest quelpa2-test-dep-version ()
+  "Verify `quelpa2--dep-version' returns the required version of a dep entry."
+  (should (equal (quelpa2--dep-version '(test-dep "1.0")) '(1 0)))
+  (should (equal (quelpa2--dep-version '(test-dep "2.0.1")) '(2 0 1)))
+  (should (equal (quelpa2--dep-version '(test-dep (3 0))) '(3 0)))
+  (should (null (quelpa2--dep-version '(test-dep)))))
+
+(ert-deftest quelpa2-test-resolve-dep-older-version ()
+  "A dependency installed at an older version than required is upgraded."
+  (let ((temp-file (make-temp-file "quelpa2-test-" nil ".el"))
+        (upgraded nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert ";;; test-pkg.el --- Test file\n\n;; Version: 0.5\n"
+                    ";; Package-Requires: ((test-dep \"1.0\"))\n\n(provide 'test-pkg)\n;;; test-pkg.el ends here\n"))
+          (cl-letf* ((package-archives nil)
+                     ((symbol-function 'quelpa2--find-package-main-file)
+                      (lambda (_pkg) temp-file))
+                     ((symbol-function 'package-installed-p)
+                      (lambda (pkg &optional min-version)
+                        (when (eq pkg 'test-dep)
+                          (if min-version nil t))))
+                     ((symbol-function 'package-upgrade)
+                      (lambda (pkg) (push pkg upgraded)))
+                     ((symbol-function 'package-install)
+                      (lambda (_pkg) (error "should not install when upgrading")))
+                     ((symbol-function 'package-activate)
+                      (lambda (&rest _))))
+            (should-not (quelpa2--resolve-dependencies 'test-pkg))
+            (should (memq 'test-dep upgraded))))
+      (delete-file temp-file))))
+
+(ert-deftest quelpa2-test-resolve-dep-satisfied-version ()
+  "A dependency installed at a version satisfying the requirement is not upgraded."
+  (let ((temp-file (make-temp-file "quelpa2-test-" nil ".el"))
+        (upgraded nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert ";;; test-pkg.el --- Test file\n\n;; Version: 0.5\n"
+                    ";; Package-Requires: ((test-dep \"1.0\"))\n\n(provide 'test-pkg)\n"))
+          (cl-letf* ((package-archives nil)
+                     ((symbol-function 'quelpa2--find-package-main-file)
+                      (lambda (_pkg) temp-file))
+                     ((symbol-function 'package-installed-p)
+                      (lambda (pkg &optional _min-version) (eq pkg 'test-dep)))
+                     ((symbol-function 'package-upgrade)
+                      (lambda (pkg) (push pkg upgraded)))
+                     ((symbol-function 'package-install)
+                      (lambda (_pkg) (push 'unexpected-install upgraded))))
+            (should-not (quelpa2--resolve-dependencies 'test-pkg))
+            (should-not upgraded)))
+      (delete-file temp-file))))
+
+(ert-deftest quelpa2-test-resolve-dep-not-installed ()
+  "A dependency that is not installed is installed (existing behavior)."
+  (let ((temp-file (make-temp-file "quelpa2-test-" nil ".el"))
+        (installed nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert ";;; test-pkg.el --- Test file\n\n;; Version: 0.5\n"
+                    ";; Package-Requires: ((test-dep \"1.0\"))\n\n(provide 'test-pkg)\n"))
+          (cl-letf* ((package-archives nil)
+                     ((symbol-function 'quelpa2--find-package-main-file)
+                      (lambda (_pkg) temp-file))
+                     ((symbol-function 'package-installed-p)
+                      (lambda (_pkg &optional _min-version) nil))
+                     ((symbol-function 'package-install)
+                      (lambda (pkg) (push pkg installed)))
+                     ((symbol-function 'package-upgrade)
+                      (lambda (_pkg) (error "should not upgrade when not installed")))
+                     ((symbol-function 'package-activate)
+                      (lambda (&rest _))))
+            (should-not (quelpa2--resolve-dependencies 'test-pkg))
+            (should (memq 'test-dep installed))))
+      (delete-file temp-file))))
+
 (provide 'quelpa2-test)
 ;;; quelpa2-test.el ends here
