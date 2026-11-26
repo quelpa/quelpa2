@@ -256,5 +256,75 @@ Skipped unless environment variable `RUN_NETWORK_TESTS' is set to 1."
             (should (memq 'test-dep installed))))
       (delete-file temp-file))))
 
+(ert-deftest quelpa2-test-pvrecipe-fallback-disabled-by-default ()
+  "The `pvrecipe' fallback is off by default and never consulted."
+  (should-not (default-value 'quelpa2-use-pvrecipe))
+  (let ((temp-file (make-temp-file "quelpa2-test-" nil ".el"))
+        (required nil)
+        (pvrecipe-called nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert ";;; test-pkg.el --- Test file\n\n;; Version: 0.5\n"
+                    ";; Package-Requires: ((test-dep \"1.0\"))\n\n(provide 'test-pkg)\n"))
+          (cl-letf* ((package-archives nil)
+                     (orig-require (symbol-function 'require))
+                     ((symbol-function 'require)
+                      (lambda (feature &optional filename noerror)
+                        (if (eq feature 'pvrecipe)
+                            (progn (push feature required) t)
+                          (funcall orig-require feature filename noerror))))
+                     ((symbol-function 'quelpa2--find-package-main-file)
+                      (lambda (_pkg) temp-file))
+                     ((symbol-function 'package-installed-p)
+                      (lambda (&rest _) nil))
+                     ((symbol-function 'package-install)
+                      (lambda (_pkg) (error "not in archives")))
+                     ((symbol-function 'pvrecipe)
+                      (lambda (_pkg) (setq pvrecipe-called t)
+                        '(test-dep :url "https://example.com/test-dep")))
+                     ((symbol-function 'package-vc-install)
+                      (lambda (_spec) (error "should not install via VC")))
+                     ((symbol-function 'package-activate)
+                      (lambda (&rest _))))
+            (should-error (quelpa2--resolve-dependencies 'test-pkg))
+            (should-not required)
+            (should-not pvrecipe-called)))
+      (delete-file temp-file))))
+
+(ert-deftest quelpa2-test-pvrecipe-fallback-enabled ()
+  "With `quelpa2-use-pvrecipe' non-nil the MELPA recipe fallback is used."
+  (let ((temp-file (make-temp-file "quelpa2-test-" nil ".el"))
+        (vc-installed nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert ";;; test-pkg.el --- Test file\n\n;; Version: 0.5\n"
+                    ";; Package-Requires: ((test-dep \"1.0\"))\n\n(provide 'test-pkg)\n"))
+          (cl-letf* ((quelpa2-use-pvrecipe t)
+                     (package-archives nil)
+                     (orig-require (symbol-function 'require))
+                     ((symbol-function 'require)
+                      (lambda (feature &optional filename noerror)
+                        (if (eq feature 'pvrecipe)
+                            t
+                          (funcall orig-require feature filename noerror))))
+                     ((symbol-function 'quelpa2--find-package-main-file)
+                      (lambda (pkg) (when (eq pkg 'test-pkg) temp-file)))
+                     ((symbol-function 'package-installed-p)
+                      (lambda (&rest _) nil))
+                     ((symbol-function 'package-install)
+                      (lambda (_pkg) (error "not in archives")))
+                     ((symbol-function 'pvrecipe)
+                      (lambda (_pkg) '(test-dep :url "https://example.com/test-dep")))
+                     ((symbol-function 'package-vc-install)
+                      (lambda (spec) (push spec vc-installed)))
+                     ((symbol-function 'package-activate)
+                      (lambda (&rest _))))
+            (should-not (quelpa2--resolve-dependencies 'test-pkg))
+            (should (equal vc-installed
+                           '((test-dep :url "https://example.com/test-dep"))))))
+      (delete-file temp-file))))
+
 (provide 'quelpa2-test)
 ;;; quelpa2-test.el ends here

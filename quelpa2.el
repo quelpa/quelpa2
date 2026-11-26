@@ -1,7 +1,7 @@
 ;;; quelpa2.el --- Next-gen decentralized package manager -*- lexical-binding: t; -*-
 
 ;; Author: Reto Hubmann (@steckerhalter)
-;; Version: 0.1.6
+;; Version: 0.1.7
 ;; URL: https://github.com/quelpa/quelpa2
 ;; Package-Origin: (quelpa2 :url "https://github.com/quelpa/quelpa2")
 ;; Package-Requires: ((emacs "29.1"))
@@ -18,8 +18,9 @@
 ;;   ;; Package-Requires: ((emacs "29.1") (dep-a "1.0"))
 ;;   ;; Package-Requires-Origins: ((dep-a :url "https://github.com/user/dep-a"))
 ;;
-;; The `pvrecipe` library is optional: when installed, quelpa2 uses it
-;; as a fallback to look up MELPA recipes for dependencies without origins.
+;; The `pvrecipe' library is optional: install it and set
+;; `quelpa2-use-pvrecipe' to non-nil to use it as a fallback that looks up
+;; MELPA recipes for dependencies without origins.
 
 ;;; Code:
 
@@ -27,6 +28,9 @@
 (require 'lisp-mnt)
 (require 'package)
 (require 'package-vc)
+
+;; `pvrecipe' is optional; see `quelpa2-use-pvrecipe'.
+(declare-function pvrecipe "pvrecipe" (package))
 
 (defgroup quelpa2 nil
   "Decentralized, registry-free package management built on `package-vc'."
@@ -50,6 +54,21 @@ requested via the `:update' keyword of a `quelpa2' specification."
   (if (plist-member plist :update)
       (plist-get plist :update)
     quelpa2-update-p))
+
+;;;; MELPA Recipe Fallback
+
+(defcustom quelpa2-use-pvrecipe nil
+  "Whether `quelpa2' may use the optional `pvrecipe' library.
+When non-nil and `pvrecipe' is installed, dependencies that are neither
+available from a configured archive nor listed in `Package-Requires-Origins'
+are resolved by fetching their MELPA recipe and translating it into a
+`package-vc' specification.
+
+The default is nil: `quelpa2' stays purist and only uses the sources declared
+in the package headers.  Install `pvrecipe' and set this option to non-nil to
+enable the fallback."
+  :type 'boolean
+  :group 'quelpa2)
 
 ;;;; Header Extraction
 
@@ -151,15 +170,20 @@ VISITED tracks already-processed package symbols to prevent cycles."
                         (message "quelpa2: Resolving %s via Package-Requires-Origins..." dep-name)
                         (package-vc-install dep-spec)
                         (quelpa2--resolve-dependencies dep-name visited)))
-                     ((and (require 'pvrecipe nil t)
+                     ((and quelpa2-use-pvrecipe
+                           (require 'pvrecipe nil t)
                            (when-let* ((spec (pvrecipe dep-name)))
                              (message "quelpa2: Resolving %s via MELPA recipe (pvrecipe)..." dep-name)
                              (package-vc-install spec)
                              (quelpa2--resolve-dependencies dep-name visited)
                              t)))
                      (t
-                      (error "quelpa2: Dependency `%s' required by `%s' not found in archives or Package-Requires-Origins"
-                             dep-name pkg-name))))))))
+                      (error "quelpa2: Dependency `%s' required by `%s' not found in archives or Package-Requires-Origins%s"
+                             dep-name pkg-name
+                             (if (and (not quelpa2-use-pvrecipe)
+                                      (locate-library "pvrecipe"))
+                                 " (pvrecipe is installed; set `quelpa2-use-pvrecipe' to enable the MELPA recipe fallback)"
+                               "")))))))))
       ;; Re-activate PKG-NAME if new dependencies were installed after it
       (when installed-any
         (package-activate pkg-name)))))

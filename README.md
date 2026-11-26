@@ -81,23 +81,40 @@ Or with `use-package` (Emacs 29+):
 
 ## Optional Dependency: [`pvrecipe`](https://github.com/quelpa/pvrecipe)
 
-The library **`pvrecipe`** can be installed to look up MELPA recipes and translate them into
-`package-vc` specifications, so dependencies without a `Package-Requires-Origins` entry can still be resolved and installed. This should facilitate the user to switch to `quelpa2` before the new headers are adopted into the packages itself. So for example if we take the package [`back-button`](https://github.com/rolandwalker/back-button), if you look at its headers:
+The library **`pvrecipe`** can be installed and enabled to look up MELPA recipes and translate
+them into `package-vc` specifications, so dependencies without a `Package-Requires-Origins`
+entry can still be resolved and installed. This eases the migration to `quelpa2` before the new
+headers are adopted by the packages themselves. For example,
+[`back-button`](https://github.com/rolandwalker/back-button) declares:
 
-
-``` elisp
-Package-Requires: ((nav-flash "1.0.0") (smartrep "0.0.3") (list-utils "0.4.2") (persistent-soft "0.8.8") (pcache "0.2.3"))
+```elisp
+;; Package-Requires: ((nav-flash "1.0.0") (smartrep "0.0.3")
+;;                    (list-utils "0.4.2") (persistent-soft "0.8.8")
+;;                    (pcache "0.2.3"))
 ```
 
-It pulls in 5 different dependencies. If you don't use `pvrecipe` then you have to manually add all of these dependencies. This can get tedious if you want to migrate your init file to `quelpa2`.
+That is five dependencies, none of which ship in a configured archive. Without `pvrecipe` you
+would have to install each of them manually — in the right order — before installing
+`back-button`, because `quelpa2` can only fall back to origins the package itself declares in
+`Package-Requires-Origins`. With `pvrecipe`, the MELPA recipes are fetched and translated on
+the fly.
 
-To install `pvrecipe` with `quelpa2` use:
+To install `pvrecipe` with `quelpa2` and keep it updated:
 
 ```elisp
 (quelpa2 '(pvrecipe :url "https://github.com/quelpa/pvrecipe" :update t))
 ```
 
-After that the MELPA-recipe fallback is active in `quelpa2`. `:update t` makes sure it is always updated. This is important since `pvrecipe` and `quelpa2` work hand in hand. 
+The fallback is disabled by default, so `quelpa2` stays purist unless you opt in:
+
+```elisp
+(setq quelpa2-use-pvrecipe t)
+```
+
+Once enabled, the MELPA-recipe fallback is active in `quelpa2`. `:update t` matters because
+`pvrecipe` tracks MELPA's recipe formats, so a stale copy can translate newer recipes
+incorrectly. Make sure the install and the `setq` run before you install packages that depend
+on the fallback.
 
 ---
 
