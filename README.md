@@ -82,15 +82,22 @@ Or with `use-package` (Emacs 29+):
 ## Optional Dependency: [`pvrecipe`](https://github.com/quelpa/pvrecipe)
 
 The library **`pvrecipe`** can be installed to look up MELPA recipes and translate them into
-`package-vc` specifications, so dependencies without a `Package-Requires-Origins` entry can still be resolved and installed.
+`package-vc` specifications, so dependencies without a `Package-Requires-Origins` entry can still be resolved and installed. This should facilitate the user to switch to `quelpa2` before the new headers are adopted into the packages itself. So for example if we take the package [`back-button`](https://github.com/rolandwalker/back-button), if you look at its headers:
+
+
+``` elisp
+Package-Requires: ((nav-flash "1.0.0") (smartrep "0.0.3") (list-utils "0.4.2") (persistent-soft "0.8.8") (pcache "0.2.3"))
+```
+
+It pulls in 5 different dependencies. If you don't use `pvrecipe` then you have to manually add all of these dependencies. This can get tedious if you want to migrate your init file to `quelpa2`.
 
 To install `pvrecipe` with `quelpa2` use:
 
 ```elisp
-(quelpa2 '(pvrecipe :url "https://github.com/quelpa/pvrecipe"))
+(quelpa2 '(pvrecipe :url "https://github.com/quelpa/pvrecipe" :update t))
 ```
 
-After that the MELPA-recipe fallback is active in `quelpa2`.
+After that the MELPA-recipe fallback is active in `quelpa2`. `:update t` makes sure it is always updated. This is important since `pvrecipe` and `quelpa2` work hand in hand. 
 
 ---
 
